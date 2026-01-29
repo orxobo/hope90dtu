@@ -4,73 +4,73 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
-	"net"
 	"time"
 )
 
-func analyzeProtocol(conn *net.UDPConn) {
+type E90Command struct {
+	CommandBytes      []byte
+	CommandName       string
+	InterpretFunction func(response []byte) string
+	SecondsTimeout    int
+	Description       string
+}
+
+func analyzeProtocol(e90 *E90Device) {
 	fmt.Println("\n=== PROTOCOL ANALYSIS ===")
 
-	// Test known working commands
-	fmt.Println("\nTest 1: RSSI Query")
-	rssiCommand := []byte{0xc0, 0xc1, 0xc2, 0xc3, 0x00, 0x01}
-	fmt.Printf("Sending RSSI command: %s\n", hex.EncodeToString(rssiCommand))
-
-	err := sendUDPCommand(conn, rssiCommand)
-	if err != nil {
-		log.Printf("Failed to send RSSI command: %v", err)
-	} else {
-		fmt.Println("RSSI command sent successfully")
+	// can read both registers at once with []byte{0xc0, 0xc1, 0xc2, 0xc3, 0x00, 0x02}
+	// ie. C0 C1 C2 C3 + [Start Address] + [Read Length], returns 5 bytes instead of 4
+	commands := []E90Command{
+		{
+			CommandBytes:      []byte{0xc0, 0xc1, 0xc2, 0xc3, 0x00, 0x01},
+			CommandName:       "RSSI background noise",
+			InterpretFunction: interpretRSSIResponse,
+			Description:       "Read first RSSI register.\nMeasures the background noise level on the current channel (no signal present).",
+		},
+		{
+			CommandBytes:      []byte{0xc0, 0xc1, 0xc2, 0xc3, 0x01, 0x01},
+			CommandName:       "RSSI Last Response",
+			InterpretFunction: interpretRSSIResponse,
+			Description:       "Read second RSSI register.\nThe signal strength of the most recently received LoRa packet.",
+		},
+		{
+			CommandBytes:      []byte{0x34},
+			CommandName:       "Wait for packet",
+			InterpretFunction: genericStringResponse,
+			SecondsTimeout:    120,
+			Description:       "Defined as sync packet for LORA",
+		},
 	}
 
-	response, err := receiveUDPResponse(conn, 5*time.Second)
+	for _, c := range commands {
+		SendCommand(c, e90)
+	}
+}
+
+func SendCommand(comm E90Command, e90 *E90Device) {
+
+	fmt.Println("Testing : ", comm.CommandName)
+	fmt.Println(comm.Description)
+	fmt.Println("Sending command: ", hex.EncodeToString(comm.CommandBytes))
+
+	err := e90.sendUDPCommand(comm.CommandBytes)
 	if err != nil {
-		log.Printf("Failed to receive RSSI response: %v", err)
+		log.Println("Failed to send command: ", err)
 	} else {
-		fmt.Printf("Received RSSI response: %s\n", hex.EncodeToString(response))
-		fmt.Printf("Response bytes: %v\n", response)
-		fmt.Printf("Interpreted: %s\n", interpretRSSIResponse(response))
+		fmt.Println("Command sent successfully")
 	}
 
-	// Test Status command
-	fmt.Println("\nTest 2: Status Query")
-	statusCommand := []byte{0xc0, 0xc1, 0xc2, 0xc3, 0x00, 0x02}
-	fmt.Printf("Sending Status command: %s\n", hex.EncodeToString(statusCommand))
-
-	err = sendUDPCommand(conn, statusCommand)
-	if err != nil {
-		log.Printf("Failed to send Status command: %v", err)
-	} else {
-		fmt.Println("Status command sent successfully")
+	if comm.SecondsTimeout == 0 {
+		comm.SecondsTimeout = 5
 	}
+	response, err := e90.receiveUDPResponseWithTimeout(time.Duration(comm.SecondsTimeout) * time.Second)
 
-	response, err = receiveUDPResponse(conn, 5*time.Second)
 	if err != nil {
-		log.Printf("Failed to receive Status response: %v", err)
+		log.Println("Failed to receive response: ", err)
 	} else {
-		fmt.Printf("Received Status response: %s\n", hex.EncodeToString(response))
-		fmt.Printf("Response bytes: %v\n", response)
-		fmt.Printf("Interpreted: %s\n", interpretStatusResponse(response))
+		fmt.Println("Received response: ", hex.EncodeToString(response))
+		fmt.Println("Response bytes: ", response)
+		fmt.Println("Interpreted: ", comm.InterpretFunction(response))
 	}
-
-	// Test Forward command
-	fmt.Println("\nTest 3: Forward/Enable Command")
-	forwardCommand := []byte{0xc0, 0xc1, 0xc2, 0xc3, 0x01, 0x01}
-	fmt.Printf("Sending Forward command: %s\n", hex.EncodeToString(forwardCommand))
-
-	err = sendUDPCommand(conn, forwardCommand)
-	if err != nil {
-		log.Printf("Failed to send Forward command: %v", err)
-	} else {
-		fmt.Println("Forward command sent successfully")
-	}
-
-	response, err = receiveUDPResponse(conn, 5*time.Second)
-	if err != nil {
-		log.Printf("Failed to receive Forward response: %v", err)
-	} else {
-		fmt.Printf("Received Forward response: %s\n", hex.EncodeToString(response))
-		fmt.Printf("Response bytes: %v\n", response)
-		fmt.Printf("Interpreted: %s\n", interpretForwardResponse(response))
-	}
+	fmt.Println("===")
 }

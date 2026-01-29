@@ -2,34 +2,40 @@ package main
 
 import (
 	"net"
+	"net/netip"
 	"time"
 )
 
-func connectToUDPDevice(device Device) (*net.UDPConn, error) {
-	addr, err := net.ResolveUDPAddr("udp", device.IP+":"+device.Port)
-	if err != nil {
-		return nil, err
-	}
+type E90Device struct {
+	conn          *net.UDPConn
+	ATCommandMode bool
+}
+
+func NewE90Device(device netip.AddrPort) (*E90Device, error) {
+	addr := net.UDPAddrFromAddrPort(device)
 
 	conn, err := net.DialUDP("udp", nil, addr)
 	if err != nil {
 		return nil, err
 	}
 
-	return conn, nil
+	return &E90Device{conn, false}, nil
 }
 
-func sendUDPCommand(conn *net.UDPConn, command []byte) error {
-	_, err := conn.Write(command)
+func (e *E90Device) sendUDPCommand(command []byte) error {
+	_, err := e.conn.Write(command)
 	return err
 }
 
-func receiveUDPResponse(conn *net.UDPConn, timeout time.Duration) ([]byte, error) {
-	// Set a timeout for reading
-	conn.SetReadDeadline(time.Now().Add(timeout))
+func (e *E90Device) sendUDPASCIICommand(command string) error {
+	return e.sendUDPCommand([]byte(command))
+}
+
+func (e *E90Device) receiveUDPResponseWithTimeout(timeout time.Duration) ([]byte, error) {
+	e.conn.SetReadDeadline(time.Now().Add(timeout))
 
 	buffer := make([]byte, 1024)
-	n, err := conn.Read(buffer)
+	n, err := e.conn.Read(buffer)
 	if err != nil {
 		return nil, err
 	}

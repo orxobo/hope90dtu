@@ -3,38 +3,36 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/netip"
 )
 
 // Device configuration
-type Device struct {
-	IP   string
-	Port string
-}
+const (
+	IP   = "192.168.68.113"
+	PORT = 8886
+)
 
 func main() {
-	device := Device{
-		IP:   "192.168.68.113",
-		Port: "8886",
-	}
 
-	fmt.Printf("E90-DTU Meshtastic Control Tool\n")
-	fmt.Printf("Device: %s:%s\n", device.IP, device.Port)
+	deviceAddressPort := netip.AddrPortFrom(
+		netip.MustParseAddr(IP),
+		PORT,
+	)
+
+	fmt.Println("E90-DTU Meshtastic Control Tool")
+	fmt.Println("Device: ", deviceAddressPort.String())
 	fmt.Println("================================")
 
-	conn, err := connectToUDPDevice(device)
+	e90, err := NewE90Device(deviceAddressPort)
 	if err != nil {
 		log.Fatalf("Failed to connect to device: %v", err)
 	}
-	defer conn.Close()
+	defer e90.conn.Close()
 
 	fmt.Println("✓ UDP connection established")
 
 	// Run protocol analysis
-	analyzeProtocol(conn)
+	//analyzeProtocol(e90)
 
-	// Try to understand packet forwarding behavior
-	analyzeForwarding(conn)
-
-	// Try to configure device for packet capture
-	configureForCapture(conn)
+	e90.ATInitialise()
 }
