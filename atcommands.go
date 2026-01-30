@@ -1,288 +1,294 @@
 package main
 
 import (
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
-// === ATError ===
+//go:generate stringer -type=ATCommand -linecomment
+type ATCommand int
 
-type ATError struct {
-	Code    int
-	Message string
-	Command string
+const (
+	CMD_MODEL      ATCommand = iota // MODEL, Query model
+	CMD_NAME                        // NAME, Query/Set Name
+	CMD_SN                          // SN, Query/Set ID
+	CMD_REBT                        // REBT, Reboot device
+	CMD_RESTORE                     // RESTORE, Factory reset
+	CMD_VER                         // VER, Query version information
+	CMD_MAC                         // MAC, Querying the MAC address
+	CMD_LORA                        // LORA, Query/set the wireless parameters of the machine
+	CMD_WAN                         // WAN, Query/set network parameters
+	CMD_LPORT                       // LPORT, Query/set the local port number
+	CMD_SOCK                        // SOCK, Query/set the working mode of the machine and network parameters of the target device
+	CMD_LINKSTA                     // LINKSTA, Query network link status
+	CMD_UARTCLR                     // UARTCLR, Query/set serial port cache clearing status
+	CMD_REGMOD                      // REGMOD, Query/Set Registration Package Mode
+	CMD_REGINFO                     // REGINFO, Query/set custom registration package content
+	CMD_HEARTMOD                    // HEARTMOD, Query/set the heartbeat packet mode
+	CMD_HEARTINFO                   // HEARTINFO, Query/Set Heartbeat Data
+	CMD_SHORTM                      // SHORTM, Query/Set Short Connection Time
+	CMD_TMORST                      // TMORST, Query/set timeout restart time
+	CMD_TMOLINK                     // TMOLINK, Query/set the time and times of disconnection and reconnection
+	CMD_WEBCFGPORT                  // WEBCFGPORT, Web configuration port
+	CMD_MODWKMOD                    // MODWKMOD, Query Modbus working mode and command timeout time
+	CMD_MODPTCL                     // MODPTCL, Enable Modbus TCP to Modbus RTU protocol conversion
+	CMD_MODGTWYTM                   // MODGTWYTM, Set Modbus gateway command storage time and automatic query interval
+	CMD_MODCMDEDIT                  // MODCMDEDIT, Modbus configuration gateway pre-stored instruction query and editing
+	CMD_HTPREQMODE                  // HTPREQMODE, Query/Set HTTP Request Method
+	CMD_HTPURL                      // HTPURL, Query/Set HTTP URL Path
+	CMD_HTPHEAD                     // HTPHEAD, Query/Set HTTP header
+	CMD_MQTTCLOUD                   // MQTTCLOUD, Query/Set MQTT Target Platform
+	CMD_MQTKPALIVE                  // MQTKPALIVE, Query/Set MQTT Keep-Alive Heartbeat Packet Sending Period
+	CMD_MQTDEVID                    // MQTDEVID, Query/Set MQTT Device Name (Client ID)
+	CMD_MQTUSER                     // MQTUSER, Query/Set MQTT User Name (User Name/Device Name)
+	CMD_MQTPASS                     // MQTPASS, Query/set MQTT product password (MQTT password/Device Secret)
+	CMD_MQTTPRDKEY                  // MQTTPRDKEY, Query/Set the Product Key of Alibaba Cloud MQTT
+	CMD_MQTSUB                      // MQTSUB, Query/Set MQTT Subscription Topic
+	CMD_MQTPUB                      // MQTPUB, Query/Set MQTT Publishing Topic
+)
+
+// CommandDef binds the String, Description, and Parser together
+type CommandDef[T any] struct {
+	CmdStr      string
+	Description string
+	Parser      func(string) (T, error)
 }
 
-func (e ATError) Error() string {
-	if e.Command != "" {
-		return fmt.Sprintf("AT command '%s' error %d: %s", e.Command, e.Code, e.Message)
+// Registry: The single source of truth for Command -> Logic mapping
+var Registry = map[ATCommand]any{
+	// --- Basic Functions ---
+	CMD_MODEL:   CommandDef[string]{"MODEL", "Query model", ParseString},
+	CMD_NAME:    CommandDef[string]{"NAME", "Query/Set Name", ParseString},
+	CMD_SN:      CommandDef[string]{"SN", "Query/Set ID", ParseString},
+	CMD_REBT:    CommandDef[bool]{"REBT", "Reboot device", ParseBool},
+	CMD_RESTORE: CommandDef[bool]{"RESTORE", "Factory reset", ParseBool},
+	CMD_VER:     CommandDef[string]{"VER", "Query firmware version", ParseString},
+	CMD_MAC:     CommandDef[string]{"MAC", "Query MAC address", ParseString},
+
+	// --- Wireless & Network ---
+	CMD_LORA:    CommandDef[LoraParams]{"LORA", "Query/set wireless parameters", ParseLora},
+	CMD_WAN:     CommandDef[WanParams]{"WAN", "Query/set network parameters", ParseWan},
+	CMD_LPORT:   CommandDef[int]{"LPORT", "Query/set local port number", ParseInt},
+	CMD_SOCK:    CommandDef[SocketParams]{"SOCK", "Query/set target network parameters", ParseSocket},
+	CMD_LINKSTA: CommandDef[LinkStatus]{"LINKSTA", "Query network link status", ParseLinkStatus},
+	CMD_UARTCLR: CommandDef[bool]{"UARTCLR", "Query/set serial port cache clearing", ParseBool},
+
+	// --- Registration & Heartbeat ---
+	CMD_REGMOD:    CommandDef[string]{"REGMOD", "Query/Set Registration Package Mode", ParseString},
+	CMD_REGINFO:   CommandDef[string]{"REGINFO", "Query/set custom registration content", ParseString},
+	CMD_HEARTMOD:  CommandDef[string]{"HEARTMOD", "Query/set heartbeat packet mode", ParseString},
+	CMD_HEARTINFO: CommandDef[string]{"HEARTINFO", "Query/Set Heartbeat Data", ParseString},
+
+	// --- Timing & Connection ---
+	CMD_SHORTM:     CommandDef[int]{"SHORTM", "Query/Set Short Connection Time", ParseInt},
+	CMD_TMORST:     CommandDef[int]{"TMORST", "Query/set timeout restart time", ParseInt},
+	CMD_TMOLINK:    CommandDef[string]{"TMOLINK", "Query/set disconnect/reconnect time", ParseString},
+	CMD_WEBCFGPORT: CommandDef[int]{"WEBCFGPORT", "Web configuration port", ParseInt},
+
+	// --- Modbus ---
+	CMD_MODWKMOD:   CommandDef[string]{"MODWKMOD", "Query Modbus working mode", ParseString},
+	CMD_MODPTCL:    CommandDef[bool]{"MODPTCL", "Enable Modbus TCP to RTU conversion", ParseBool},
+	CMD_MODGTWYTM:  CommandDef[string]{"MODGTWYTM", "Set Modbus gateway timing", ParseString},
+	CMD_MODCMDEDIT: CommandDef[string]{"MODCMDEDIT", "Modbus pre-stored instruction", ParseString},
+
+	// --- HTTP & IoT ---
+	CMD_HTPREQMODE: CommandDef[string]{"HTPREQMODE", "Query/Set HTTP Request Method", ParseString},
+	CMD_HTPURL:     CommandDef[string]{"HTPURL", "Query/Set HTTP URL Path", ParseString},
+	CMD_HTPHEAD:    CommandDef[string]{"HTPHEAD", "Query/Set HTTP header", ParseString},
+
+	// --- MQTT ---
+	CMD_MQTTCLOUD:  CommandDef[string]{"MQTTCLOUD", "Query/Set MQTT Target Platform", ParseString},
+	CMD_MQTKPALIVE: CommandDef[int]{"MQTKPALIVE", "Query/Set MQTT Keep-Alive", ParseInt},
+	CMD_MQTDEVID:   CommandDef[string]{"MQTDEVID", "Query/Set MQTT Device Name", ParseString},
+	CMD_MQTUSER:    CommandDef[string]{"MQTUSER", "Query/Set MQTT User Name", ParseString},
+	CMD_MQTPASS:    CommandDef[string]{"MQTPASS", "Query/set MQTT password", ParseString},
+	CMD_MQTTPRDKEY: CommandDef[string]{"MQTTPRDKEY", "Query/Set Alibaba Product Key", ParseString},
+	CMD_MQTSUB:     CommandDef[MqttTopic]{"MQTSUB", "Query/Set MQTT Subscription Topic", ParseMqttTopic},
+	CMD_MQTPUB:     CommandDef[MqttTopic]{"MQTPUB", "Query/Set MQTT Publishing Topic", ParseMqttTopic},
+}
+
+type ATClient struct {
+	device *E90Device
+}
+
+func NewATClient(device *E90Device) *ATClient {
+	return &ATClient{device: device}
+}
+
+// Execute is the Generic entry point.
+func Execute[T any](c *ATClient, cmd ATCommand, args ...string) (T, error) {
+	var zero T
+
+	defInterface, exists := Registry[cmd]
+	if !exists {
+		return zero, fmt.Errorf("command enum %d not found in registry", cmd)
 	}
-	return fmt.Sprintf("AT error %d: %s", e.Code, e.Message)
-}
 
-func NewATError(code int, command string) ATError {
-	message := errorCodes[code]
-	if message == "" {
-		message = "Unknown error"
+	def, ok := defInterface.(CommandDef[T])
+	if !ok {
+		return zero, fmt.Errorf("type mismatch: registry expects %T, caller requested %T", defInterface, zero)
 	}
-	return ATError{
-		Code:    code,
-		Message: message,
-		Command: command,
+
+	fullCmd := def.CmdStr
+	if len(args) > 0 && args[0] != "" {
+		fullCmd = fmt.Sprintf("%s=%s", def.CmdStr, args[0])
 	}
+
+	if err := c.sendATCommand(fullCmd); err != nil {
+		return zero, err
+	}
+
+	rawBytes, err := c.receiveATResponse()
+	if err != nil {
+		return zero, err
+	}
+
+	payload, err := parseProtocolHeader(rawBytes)
+	if err != nil {
+		return zero, err
+	}
+
+	return def.Parser(payload)
 }
 
-var errorCodes = map[int]string{
-	-1: "invalid command format",
-	-2: "invalid command",
-	-3: "Not yet defined",
-	-4: "invalid parameter",
-	-5: "Not yet defined",
-}
-
-// === Core AT Response Parser ===
-
-type ATResponse struct {
-	Raw     string
-	Success bool
-	Data    string
-}
-
-func ParseResponse(raw string) ATResponse {
+func parseProtocolHeader(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
-	resp := ATResponse{Raw: raw}
+
+	if strings.Contains(raw, "+ERR=") {
+		parts := strings.Split(raw, "=")
+		if len(parts) > 1 {
+			code, _ := strconv.Atoi(parts[1])
+			msg := "Unknown"
+			switch code {
+			case 1:
+				msg = "Invalid format"
+			case 2:
+				msg = "Invalid command"
+			case 3:
+				msg = "Not defined"
+			case 4:
+				msg = "Invalid parameter"
+			case 5:
+				msg = "Not defined"
+			}
+			return "", fmt.Errorf("AT Error %d: %s", code, msg)
+		}
+		return "", errors.New("malformed error response")
+	}
 
 	if strings.HasPrefix(raw, "+OK") {
-		resp.Success = true
 		if idx := strings.Index(raw, "="); idx != -1 {
-			resp.Data = strings.TrimSpace(raw[idx+1:])
+			return strings.TrimSpace(raw[idx+1:]), nil
 		}
+		return "", nil
 	}
 
-	return resp
+	return "", fmt.Errorf("invalid response: %s", raw)
 }
 
-// === Generic Command Type ===
+// --- Specific Data Types ---
 
-type Command[T any] struct {
-	Name        string
-	Description string
-	Parser      func(string) T
+type LoraParams struct {
+	Mode, PwrMode       string
+	Addr, Baud, Ch, Wor int
 }
 
-// Execute command and parse response
-func (c Command[T]) Execute(response string) (T, error) {
-	var zero T
-	resp := ParseResponse(response)
-	if !resp.Success {
-		return zero, fmt.Errorf("command failed: %s", resp.Raw)
-	}
-	return c.Parser(resp.Data), nil
+type WanParams struct {
+	IsDHCP            bool
+	IP, Mask, GW, DNS string
 }
 
-// === Parser Factories ===
-
-func StringParser() func(string) string {
-	return func(data string) string {
-		return data
-	}
+type SocketParams struct {
+	Protocol, IP string
+	Port         int
 }
 
-func IntParser() func(string) int {
-	return func(data string) int {
-		val, _ := strconv.Atoi(data)
-		return val
-	}
-}
-
-func BoolParser() func(string) bool {
-	return func(data string) bool {
-		return true // +OK means success
-	}
-}
-
-func ModelParser() func(string) Model {
-	return func(data string) Model {
-		return Model{Name: data}
-	}
-}
-
-func LORAParser() func(string) LORAParams {
-	return func(data string) LORAParams {
-		var params LORAParams
-		parts := strings.Split(data, ",")
-		if len(parts) >= 8 {
-			params.Address, _ = strconv.Atoi(parts[0])
-			params.NetworkID, _ = strconv.Atoi(parts[1])
-			params.AirDataRate, _ = strconv.Atoi(parts[2])
-			params.PacketLength, _ = strconv.Atoi(parts[3])
-			params.Channel, _ = strconv.Atoi(parts[6])
-		}
-		return params
-	}
-}
-
-func NetworkParser() func(string) NetworkParams {
-	return func(data string) NetworkParams {
-		var params NetworkParams
-		parts := strings.Split(data, ",")
-		if len(parts) >= 4 {
-			params.Mode = strings.TrimSpace(parts[0])
-			params.IP = strings.TrimSpace(parts[1])
-			params.Gateway = strings.TrimSpace(parts[3])
-		}
-		return params
-	}
-}
-
-func ModeParser() func(string) ModeParams {
-	return func(data string) ModeParams {
-		var params ModeParams
-		parts := strings.Split(data, ",")
-		if len(parts) >= 3 {
-			params.Mode = strings.TrimSpace(parts[0])
-			params.RemoteIP = strings.TrimSpace(parts[1])
-			params.RemotePort, _ = strconv.Atoi(strings.TrimSpace(parts[2]))
-		}
-		return params
-	}
-}
-
-func TopicParser() func(string) TopicParams {
-	return func(data string) TopicParams {
-		var params TopicParams
-		parts := strings.Split(data, ",")
-		if len(parts) >= 2 {
-			params.QoS, _ = strconv.Atoi(strings.TrimSpace(parts[0]))
-			params.Topic = strings.TrimSpace(parts[1])
-		}
-		return params
-	}
-}
-
-// === Data Types ===
-
-type Model struct{ Name string }
-
-type LORAParams struct {
-	Address, NetworkID, AirDataRate, PacketLength, Channel int
-}
-
-type NetworkParams struct {
-	Mode, IP, Gateway string
-}
-
-type ModeParams struct {
-	Mode, RemoteIP string
-	RemotePort     int
-}
-
-type TopicParams struct {
+type MqttTopic struct {
 	QoS   int
 	Topic string
 }
 
-// === Command Registry ===
-
-type CommandRegistry struct {
-	commands map[string]interface{}
+type LinkStatus struct {
+	Connected bool
+	Msg       string
 }
 
-func NewCommandRegistry() *CommandRegistry {
-	reg := &CommandRegistry{
-		commands: make(map[string]interface{}),
-	}
+// --- Parsers ---
 
-	reg.commands["AT+EXAT"] = Command[bool]{
-		Name:        "AT+EXAT",
-		Description: "Exit AT mode",
-		Parser:      BoolParser(),
-	}
+func ParseString(d string) (string, error) { return d, nil }
+func ParseInt(d string) (int, error)       { return strconv.Atoi(d) }
+func ParseBool(d string) (bool, error)     { return true, nil }
 
-	reg.commands["AT+MODEL"] = Command[Model]{
-		Name:        "AT+MODEL",
-		Description: "Query model",
-		Parser:      ModelParser(),
-	}
-
-	reg.commands["AT+NAME"] = Command[string]{
-		Name:        "AT+NAME",
-		Description: "Query/set name",
-		Parser:      StringParser(),
-	}
-
-	reg.commands["AT+SN"] = Command[string]{
-		Name:        "AT+SN",
-		Description: "Query/set ID",
-		Parser:      StringParser(),
-	}
-
-	reg.commands["AT+REBT"] = Command[bool]{
-		Name:        "AT+REBT",
-		Description: "Reboot device",
-		Parser:      BoolParser(),
-	}
-
-	reg.commands["AT+LORA"] = Command[LORAParams]{
-		Name:        "AT+LORA",
-		Description: "LORA parameters",
-		Parser:      LORAParser(),
-	}
-
-	reg.commands["AT+WAN"] = Command[NetworkParams]{
-		Name:        "AT+WAN",
-		Description: "Network parameters",
-		Parser:      NetworkParser(),
-	}
-
-	reg.commands["AT+LPORT"] = Command[int]{
-		Name:        "AT+LPORT",
-		Description: "Local port",
-		Parser:      IntParser(),
-	}
-
-	reg.commands["AT+SOCK"] = Command[ModeParams]{
-		Name:        "AT+SOCK",
-		Description: "Working mode",
-		Parser:      ModeParser(),
-	}
-
-	reg.commands["AT+MQTTCLOUD"] = Command[string]{
-		Name:        "AT+MQTTCLOUD",
-		Description: "MQTT platform",
-		Parser:      StringParser(),
-	}
-
-	reg.commands["AT+MQTSUB"] = Command[TopicParams]{
-		Name:        "AT+MQTSUB",
-		Description: "MQTT subscription",
-		Parser:      TopicParser(),
-	}
-
-	reg.commands["AT+MQTPUB"] = Command[TopicParams]{
-		Name:        "AT+MQTPUB",
-		Description: "MQTT publish",
-		Parser:      TopicParser(),
-	}
-
-	return reg
+func ParseLinkStatus(d string) (LinkStatus, error) {
+	return LinkStatus{Connected: strings.Contains(d, "Connect"), Msg: d}, nil
 }
 
-// Generic Execute function (as a standalone function)
-func Execute[T any](registry *CommandRegistry, name, response string) (T, error) {
-	cmdInterface, exists := registry.commands[name]
-	if !exists {
-		var zero T
-		return zero, fmt.Errorf("unknown command: %s", name)
+func ParseLora(d string) (LoraParams, error) {
+	// e.g. MODNOR,0,2400,23,TRFIX,250,PWMAX
+	p := strings.Split(d, ",")
+	if len(p) < 7 {
+		return LoraParams{}, errors.New("bad lora format")
+	}
+	addr, _ := strconv.Atoi(p[1])
+	baud, _ := strconv.Atoi(p[2])
+	ch, _ := strconv.Atoi(p[3])
+	wor, _ := strconv.Atoi(p[5])
+	return LoraParams{Mode: p[0], Addr: addr, Baud: baud, Ch: ch, PwrMode: p[4], Wor: wor}, nil
+}
+
+func ParseWan(d string) (WanParams, error) {
+	p := strings.Split(d, ",")
+	if len(p) < 4 {
+		return WanParams{}, errors.New("bad wan format")
+	}
+	return WanParams{IsDHCP: p[0] == "DHCP", IP: p[1], Mask: p[2], GW: p[3]}, nil
+}
+
+func ParseSocket(d string) (SocketParams, error) {
+	p := strings.Split(d, ",")
+	if len(p) < 3 {
+		return SocketParams{}, errors.New("bad sock format")
+	}
+	port, _ := strconv.Atoi(p[2])
+	return SocketParams{Protocol: p[0], IP: p[1], Port: port}, nil
+}
+
+func ParseMqttTopic(d string) (MqttTopic, error) {
+	p := strings.Split(d, ",")
+	if len(p) < 2 {
+		return MqttTopic{}, errors.New("bad mqtt format")
+	}
+	q, _ := strconv.Atoi(p[0])
+	return MqttTopic{QoS: q, Topic: p[1]}, nil
+}
+
+// --- Helpers ---
+
+const DEVICE_AT_CMD = "NETWK" // Prefix on E90 when requesting AT command access
+
+// UDP helper for logging and formatting
+func (c *ATClient) sendATCommand(command string) error {
+	command = fmt.Sprint(DEVICE_AT_CMD, "+", command, "\r\n") // (0x0D and 0x0A)
+	byteCommand := []byte(command)
+	fmt.Printf("\nSending command: %s,\nBytes: %v,\nHex: %v\n\n",
+		strings.TrimSpace(command),
+		byteCommand,
+		hex.EncodeToString(byteCommand))
+	return c.device.sendUDPCommand(byteCommand)
+}
+
+// UDP helper for logging and formatting
+func (c *ATClient) receiveATResponse() (string, error) {
+
+	rawBytes, err := c.device.receiveUDPResponseWithTimeout(4 * time.Second)
+	if err != nil {
+		return "", fmt.Errorf("No response received: %w", err)
 	}
 
-	// Type assert to the correct command type
-	cmd, ok := cmdInterface.(Command[T])
-	if !ok {
-		var zero T
-		return zero, fmt.Errorf("type mismatch for command: %s", name)
-	}
-
-	return cmd.Execute(response)
+	fmt.Printf("Received: %s,\nHex: %v\n\n", strings.TrimSpace(string(rawBytes)), hex.EncodeToString(rawBytes))
+	return string(rawBytes), nil
 }

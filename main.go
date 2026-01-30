@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/netip"
+	"strings"
 )
 
 // Device configuration
@@ -21,7 +22,7 @@ func main() {
 
 	fmt.Println("E90-DTU Meshtastic Control Tool")
 	fmt.Println("Device: ", deviceAddressPort.String())
-	fmt.Println("================================")
+	fmt.Println(strings.Repeat("=", 30))
 
 	e90, err := NewE90Device(deviceAddressPort)
 	if err != nil {
@@ -31,8 +32,28 @@ func main() {
 
 	fmt.Println("✓ UDP connection established")
 
-	// Run protocol analysis
 	//analyzeProtocol(e90)
 
-	e90.ATInitialise()
+	client := NewATClient(e90)
+
+	// Example 1: Get simple string
+	if model, err := client.GetModel(); err != nil {
+		fmt.Printf("Model Failed: %v\n", err)
+	} else {
+		fmt.Printf("Model: %s\n", model)
+	}
+
+	// Example 2: Get struct
+	if lora, err := client.GetLora(); err != nil {
+		fmt.Printf("Lora Failed: %v\n", err)
+	} else {
+		fmt.Printf("Lora Baud Rate: %d\n", lora.Baud)
+	}
+
+	// Example 3: Set value
+	if port, err := client.SetLocalPort(8088); err != nil {
+		fmt.Printf("Set Port Failed: %v\n", err)
+	} else {
+		fmt.Printf("New Port: %d\n", port)
+	}
 }
