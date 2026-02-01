@@ -36,24 +36,22 @@ func main() {
 
 	client := NewATClient(e90)
 
-	// Example 1: Get simple string
-	if model, err := client.GetModel(); err != nil {
-		fmt.Printf("Model Failed: %v\n", err)
-	} else {
-		fmt.Printf("Model: %s\n", model)
+	// 1. Direct Method Usage
+	model, err := client.GetModel()
+	if err != nil {
+		fmt.Println("error getting model: ", err.Error())
 	}
+	fmt.Println("Model: ", model)
 
-	// Example 2: Get struct
-	if lora, err := client.GetLora(); err != nil {
-		fmt.Printf("Lora Failed: %v\n", err)
-	} else {
-		fmt.Printf("Lora Baud Rate: %d\n", lora.Baud)
+	// 2. Enum Usage
+	port, err := client.Run(CmdLPort)
+	if err != nil {
+		fmt.Println("error getting port: ", err.Error())
 	}
+	fmt.Println("Port: ", port)
 
-	// Example 3: Set value
-	if port, err := client.SetLocalPort(8088); err != nil {
-		fmt.Printf("Set Port Failed: %v\n", err)
-	} else {
-		fmt.Printf("New Port: %d\n", port)
-	}
+	// 3. Raw String Usage (Relies on stringer generated strings)
+	//client.RunRaw("LPORT", "9090")
+
+	client.ListCommands()
 }
