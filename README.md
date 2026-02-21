@@ -8,10 +8,10 @@
  * info https://meshtastic.au/wp/?page_id=47
 
 ## Goals
- I have an E90-DTU(900SL22)E fro Ebyte with the attached user manual. I want to be able to communicate through it with my Lillygo T-deck using meshtastic.
+ I have an E90-DTU(900SL22)E fro Ebyte with the attached user manual.
 The E90-DTU(900SL22)E does not have a serial interface nor dip switches, only an Ethernet port.
 On the E90:
-* I have set up a UDP server on socket A configured for port 8886.
+* set up a UDP server on socket A configured for port 8886.
 * In the wireless settings:
     * Module Address: 65535 (broadcast/monitor)
     * Channel 76 (926.125Mhz)
@@ -21,42 +21,15 @@ On the E90:
     * Packet RSSI enabled
     * Channel RSSI enabled
     * All other settings are default
-* It is currently sitting on IP 192.168.68.113
-On the T-Deck:
-* Device role: client
-* Must see a node before it will try to transmit.
-* frequency slot 1 926.125Mhz [250kHz]
-* Channel MEDIUM_FAST
 
-I need to make the E90 transmit a meshtastic "Node" so i can examine the packets and communicate via meshtastic.
-I need to determine how to use the UDP interface past getting RSSI.
-I need you to create a golang app with me that:
-* Initially tests to see if we can communicate with the E90,
-* Determine more functionality from the UDP server in the E90.
-* Create a node that the T-deck will see so i can transmit packts back to the E90,
-* Help me examine the returned packets.
- Lets start with checking to see if we can communicate with the E90 and return something.
-
+## Trying to set up as meshtastic node
 https://github.com/meshtastic
 https://meshtastic.org/
 
 ## Device details
-### Testing IPs
-* GC: 192.168.68.113
-* BNE: 192.168.0.125
-
-### Hardware
-MAC 2C-BC-BB-34-25-DF
-Serial S5200489S
-Firmware FW-9181-0-10
-
 E90-DTU(900SL22)E
 https://www.cdebyte.com/products/E90-DTU(900SL22)E
-
 https://www.cdebyte.com/Resources-Download
-
-## Testing device
-lillygo t-deck with the meshtastic firmware
 
 ## Tests:
 ```
