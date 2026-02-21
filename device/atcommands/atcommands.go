@@ -25,9 +25,9 @@
 package atcommands
 
 import (
-	"e90dtu/device"
 	"errors"
 	"fmt"
+	"hope90dtu/device"
 	"strconv"
 	"strings"
 	"time"

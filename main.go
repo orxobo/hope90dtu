@@ -1,16 +1,14 @@
 package main
 
 import (
-	"e90dtu/ui"
+	"hope90dtu/ui"
 
 	"fyne.io/fyne/v2/app"
 )
 
 func main() {
-
-	myApp := app.NewWithID("com.icsoft.e90config")
-	mainWindow := ui.NewMainWindow(myApp)
-
+	e90App := app.New()
+	mainWindow := ui.NewMainWindow(e90App)
 	mainWindow.Show()
-	myApp.Run()
+	e90App.Run()
 }

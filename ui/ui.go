@@ -12,7 +12,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	"e90dtu/device"
+	"hope90dtu/device"
 )
 
 type MainWindow struct {
@@ -59,9 +59,8 @@ func NewMainWindow(app fyne.App) *MainWindow {
 	}
 
 	w.window.Resize(fyne.NewSize(1200, 800))
-	w.appendToMonitor("E90-DTU Meshtastic Control Tool")
 	w.makeUI()
-
+	w.appendToMonitor("E90-DTU Configuration Tool")
 	return w
 }
 
@@ -442,8 +441,7 @@ func (w *MainWindow) appendToMonitor(line string) {
 	w.monitorText.SetText(fullText)
 
 	if w.isAutoScroll {
-		// In a real implementation, we'd scroll to bottom
-		// This requires access to the scroll container
+
 	}
 }
 

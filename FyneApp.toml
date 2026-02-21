@@ -1,0 +1,22 @@
+Website = "https://icsoft.com.au"
+
+[Details]
+  Icon = ""
+  Name = "Hope90DTU"
+  ID = "au.com.icsoft.hope90dtu"
+  Version = "0.9.0"
+  Build = 13
+
+[Development]
+  BuildName = "Dev"
+  EnableParams = "True"
+
+[Release]
+  BuildName = "Rel"
+  EnableParams = "False"
+
+[LinuxAndBSD]
+  GenericName = "Hope90DTU"
+  Categories = ["Utilities"]
+  Comment = "UI for E90DTU"
+  Keywords = ["lora", "lorawan"]
