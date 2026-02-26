@@ -1,0 +1,69 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"command": "fyne",
+			"label": "Linux",
+			"options": {
+  				"statusbar": {
+   					"label" : "Linux",
+					"color" : "#FF00FF",
+					"detail": "Build a release for Linux"
+ 				}
+			},
+			"args": [
+				"build",
+				"--release",
+				"${fileDirname}"
+			],
+			"group": "build",
+			"detail": "fyne build --release ${fileDirname}"
+		},
+		{
+			"type": "shell",
+			"command": "fyne",
+			"label": "windows",
+			"options": {
+				"statusbar": {
+					"label": "Windows",
+					"color": "#FFFF00",
+					"detail": "Package into Windows EXE for installation into Windows"
+				},
+				"env": {
+                    "CGO_ENABLED": "1",
+					"GOOS": "windows",
+					"GOARCH": "amd64",
+					"CC": "x86_64-w64-mingw32-gcc",
+					"CXX": "x86_64-w64-mingw32-g++"
+                }
+			},
+			"args": [
+				"package",
+				"-os",
+				"windows",
+			],
+			"group": "build",
+			"detail": "CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ fyne package -os windows"
+		},
+		{
+			"type": "shell",
+			"command": "fyne",
+			"label": "android",
+			"options": {
+				"statusbar": {
+					"label": "Android",
+					"color": "#0d8d08",
+					"detail": "Package into Android APK for installation into Android"
+				}
+			},
+			"args": [
+				"package",
+				"-os",
+				"android",
+			],
+			"group": "build",
+			"detail": "fyne package -os android"
+		},
+	]
+}
