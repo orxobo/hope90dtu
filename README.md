@@ -2,6 +2,13 @@
  This is a personal test tool to help with debugging and communication with E90-DTU devices on Linux/Windows/Android, as only a Windows tool exists from the manufacturer.
  It is in no way associated with the device manufacturer.
 
+ ## ScreenShots
+ ![Alt text](assets/Screenshot1.png "Connection")
+ ![Alt text](assets/Screenshot2.png "AT Terminal")
+ ![Alt text](assets/Screenshot3.png "Parameters")
+ ![Alt text](assets/Screenshot4.png "Monitor")
+ ![Alt text](assets/Screenshot5.png "Test Tools")
+
 ## Notes:
 * Frequency id 850.125 to 930.125 in 1Mhz increments, ie. channels 1-80
 * Module address id for connecting to other E90 modules, like a filter 0-65535 where 65535 is broadcast/monitor all (filterless)

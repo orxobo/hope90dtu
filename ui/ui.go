@@ -35,11 +35,9 @@ type MainWindow struct {
 	atClient        *atcommands.ATClient
 
 	// Monitor tab
-	monitorText     *widget.Entry
-	autoScrollCheck *widget.Check
-	monitorBuffer   []string
-	isAutoScroll    bool
-	listenerBtn     *widget.Button
+	monitorText   *widget.Entry
+	monitorBuffer []string
+	listenerBtn   *widget.Button
 
 	// Parameters tab
 	wirelessForm *widget.Form
@@ -54,7 +52,6 @@ func NewMainWindow(app fyne.App) *MainWindow {
 		app:           app,
 		window:        app.NewWindow("HOPE90-DTU Configuration Tool"),
 		monitorBuffer: make([]string, 0),
-		isAutoScroll:  true,
 	}
 
 	w.makeUI()
